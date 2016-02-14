@@ -1,7 +1,8 @@
 package com.google.devrel.training.conference.spi;
 
+import com.google.devrel.training.conference.service.OfyService;
 import static com.google.devrel.training.conference.service.OfyService.ofy;
-
+import static com.google.devrel.training.conference.service.OfyService.factory;
 import com.google.api.server.spi.config.Api;
 import com.google.api.server.spi.config.ApiMethod;
 import com.google.api.server.spi.config.ApiMethod.HttpMethod;
@@ -54,9 +55,8 @@ public class ConferenceApi {
         // Get the userId and mainEmail
         String userId=null;
         String mainEmail=null;
-        String displayName; 
-        TeeShirtSize teeShirtSize; 
-
+        String displayName = profileForm.getDisplayName(); 
+        TeeShirtSize teeShirtSize = profileForm.getTeeShirtSize(); 
         //DONE TODO 2
         // If the user is not logged in, throw an UnauthorizedException
         if(user==null){
@@ -84,20 +84,22 @@ public class ConferenceApi {
 
         // Create a new Profile entity from the
         // userId, displayName, mainEmail and teeShirtSize
-        if(profileForm.getDisplayName()!=null){
-        	displayName=profileForm.getDisplayName();
-        }else{
-        	displayName=extractDefaultDisplayNameFromEmail(mainEmail);
-        }
-        if(profileForm.getTeeShirtSize()!=null){
-        	teeShirtSize=profileForm.getTeeShirtSize();
-        }else{
-        	teeShirtSize = TeeShirtSize.NOT_SPECIFIED;
-        }
-        Profile profile = new Profile(userId, displayName, mainEmail, teeShirtSize);
+        Profile profile = ofy().load().key(Key.create(Profile.class, userId)).now();
+        if(profile==null){ 
+            if(displayName==null){ 
+                displayName=extractDefaultDisplayNameFromEmail(user.getEmail()); 
+            } 
+            if(teeShirtSize==null){ 
+                teeShirtSize=teeShirtSize.NOT_SPECIFIED; 
+            } 
+            profile=new Profile(userId,displayName,mainEmail,teeShirtSize); 
+          } else{ 
+           profile.update(displayName,teeShirtSize);   
+        } 
         // TODO 3 (In Lesson 3)
         // Save the Profile entity in the datastore
         // Return the profile
+        ofy().save().entity(profile).now(); 
         return profile;
     }
 
@@ -116,9 +118,10 @@ public class ConferenceApi {
         if (user == null) { 
             throw new UnauthorizedException("Authorization required"); 
         } 
-        String userId = ""; // TODO
-        Key key = null; // TODO
-        Profile profile = null; // TODO load the Profile entity
+        String userId = user.getUserId();
+        Key key = Key.create(Profile.class,userId);
+        Profile profile = (Profile)ofy().load().key(key).now();
         return profile;
+
     } 
 }
