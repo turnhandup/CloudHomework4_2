@@ -15,11 +15,14 @@ import com.google.api.server.spi.response.ConflictException;
 import com.google.api.server.spi.response.ForbiddenException;
 import com.google.api.server.spi.response.NotFoundException;
 import com.google.api.server.spi.response.UnauthorizedException;
+import com.google.appengine.api.memcache.MemcacheService;
+import com.google.appengine.api.memcache.MemcacheServiceFactory;
 import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.QueueFactory;
 import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.users.User;
 import com.google.devrel.training.conference.Constants;
+import com.google.devrel.training.conference.domain.Announcement;
 import com.google.devrel.training.conference.domain.Conference;
 import com.google.devrel.training.conference.domain.Profile;
 import com.google.devrel.training.conference.form.ConferenceForm;
@@ -161,12 +164,13 @@ public class ConferenceApi {
         Key<Profile> profileKey = Key.create(Profile.class, userId);
         final Key<Conference> conferenceKey = OfyService.factory().allocateId(profileKey, Conference.class);
         final long conferenceId = conferenceKey.getId();
-        final Queue queue = QueueFactory.getDefaultQueue();
+        
         Conference conference = ofy().transact(new Work<Conference>() {
             public Conference run() {
                 Profile profile = getProfileFromUser(user);
                 Conference conference = new Conference(conferenceId, userId, conferenceForm);
                 ofy().save().entities(conference, profile).now();
+                final Queue queue = QueueFactory.getDefaultQueue();
                 queue.add(ofy().getTransaction(),
                         TaskOptions.Builder.withUrl("/tasks/send_confirmation_email")
                         .param("email", profile.getMainEmail())
@@ -201,13 +205,14 @@ public class ConferenceApi {
             path="getConferencesCreated",
     		httpMethod=HttpMethod.POST
     		)
-    public List<Conference> getConferenceCreated(final User user) throws UnauthorizedException{
-    	if(user==null){
-    		throw new UnauthorizedException("Authorization required");
-    	}
-    	String userId=user.getUserId();
-    	return ofy().load().type(Conference.class).ancestor(Key.create(Profile.class, userId))
-                 .order("name").list();	
+    public List<Conference> getConferencesCreated(User user) throws UnauthorizedException{
+    	if(user==null)
+    		 throw new UnauthorizedException("Authorization required");
+    	
+    	String userId = user.getUserId();
+        Key<Profile> key = Key.create(Profile.class, userId);
+    	Query query = ofy().load().type(Conference.class).ancestor(key);
+    	return query.list();
     }
     
     @ApiMethod(
@@ -461,5 +466,15 @@ public WrappedBoolean unregisterFromConference(final User user,
     }  
     return new WrappedBoolean(result.getResult()); 
 } 
-    
+@ApiMethod(name="getAnnouncement",path="announcement", httpMethod = HttpMethod.GET) 
+	public Announcement getAnnouncement(){ 
+	MemcacheService memcacheService = MemcacheServiceFactory.getMemcacheService(); 
+	String announcementKey = Constants.MEMCACHE_ANNOUNCEMENTS_KEY; 
+	Object message = memcacheService.get(announcementKey); 
+	if(message != null){ 
+		return new Announcement(message.toString()); 
+	} 
+	return null; 
+  
+} 
 }

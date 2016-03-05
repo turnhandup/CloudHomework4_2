@@ -1,4 +1,4 @@
-package com.google.devrel.training.conference.form;
+package com.google.devrel.training.conference.domain;
 
 import static com.google.devrel.training.conference.service.OfyService.ofy;
 
